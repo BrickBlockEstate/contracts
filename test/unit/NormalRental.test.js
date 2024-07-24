@@ -3,19 +3,33 @@ const {
   developmentChains,
   testURI,
   networkConfig,
+  upkeepInterval,
 } = require("../../helper-hardhat.confg");
 const { network, getNamedAccounts, ethers, deployments } = require("hardhat");
+const { AbiCoder } = require("ethers");
 
 !developmentChains.includes(network.name)
   ? describe.skip
   : describe("NormalRental unit tests", () => {
-      let normalRental, deployer, user, userSigner, signer, routerV2, usdt;
+      let normalRental,
+        deployer,
+        user,
+        user2,
+        userSigner,
+        user2Signer,
+        signer,
+        routerV2,
+        usdt,
+        deployerSigner;
       const chainId = network.config.chainId;
       beforeEach(async function () {
         deployer = (await getNamedAccounts()).deployer;
         user = (await getNamedAccounts()).user;
+        user2 = (await getNamedAccounts()).user2;
         signer = await ethers.provider.getSigner();
         userSigner = await ethers.getSigner(user);
+        deployerSigner = await ethers.getSigner(deployer);
+        user2Signer = await ethers.getSigner(user2);
         await deployments.fixture(["all"]);
         normalRental = await ethers.getContract("NormalRental", deployer);
         usdt = await ethers.getContractAt(
@@ -660,7 +674,6 @@ const { network, getNamedAccounts, ethers, deployments } = require("hardhat");
           const price = BigInt(34000);
           const seed = Math.floor(Math.random() * 9864);
           const isOffplan = false;
-
           await normalRental.addProperty(testURI, price, seed, isOffplan);
           const newTokenId = await normalRental.getTokenId();
           tokenId = newTokenId;
@@ -848,6 +861,143 @@ const { network, getNamedAccounts, ethers, deployments } = require("hardhat");
             BigInt(installmentAmountBefore) - BigInt(monthlyPayment),
             BigInt(installmentAmountAfter)
           );
+        });
+      });
+
+      describe("checkUpkeep function", async () => {
+        let tokenId, userBalance, installments;
+        /**
+         * 1. Add offplan property
+         * 2. Buy usdt for user
+         * 3. Buy an offplan investment
+         */
+        beforeEach(async () => {
+          // Admin adds a property
+          const price = BigInt(500000);
+          const seed = Math.floor(Math.random() * 5561234);
+          const isOffplan = true;
+
+          const tx = await normalRental.addProperty(
+            testURI,
+            price,
+            seed,
+            isOffplan
+          );
+          await tx.wait(1);
+
+          const tokenIds = await normalRental.getOffplanTokenIds();
+          tokenId = tokenIds[0];
+
+          // Investor/user buys some usdt
+          const amountOutMin = 145000000000n;
+          const path = [
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", //weth
+            "0xdac17f958d2ee523a2206206994597c13d831ec7", //usdt
+          ];
+
+          const deadline = Math.floor(Date.now() / 1000) + 60 * 10;
+          const transactionResponse = await routerV2
+            .connect(userSigner)
+            .swapExactETHForTokens(amountOutMin, path, user, deadline, {
+              value: ethers.parseEther("43"),
+            });
+          await transactionResponse.wait(1);
+          userBalance = await usdt.balanceOf(user);
+
+          // The investor/user mints an offplan property with installments
+          const amountToOwn = 20n;
+          const firstInstallment = BigInt(30000);
+          await usdt
+            .connect(userSigner)
+            .approve(normalRental.target, firstInstallment * BigInt(1e6));
+          const tx2 = await normalRental
+            .connect(userSigner)
+            .mintOffplanInstallments(tokenId, amountToOwn, firstInstallment);
+          await tx2.wait(1);
+
+          installments = await normalRental.getInstallments(tokenId);
+        });
+        it("Should return false if the time hasn't passed", async () => {
+          const { upkeepNeeded } = await normalRental.checkUpkeep.staticCall(
+            "0x"
+          );
+          assert(!upkeepNeeded);
+        });
+        it("Should return true and the address if payment is due", async () => {
+          await network.provider.send("evm_increaseTime", [
+            parseInt(upkeepInterval) + 10,
+          ]);
+          await network.provider.request({ method: "evm_mine", params: [] });
+          const { upkeepNeeded, performData } =
+            await normalRental.checkUpkeep.staticCall("0x");
+          const abiCoder = AbiCoder.defaultAbiCoder();
+          const decodedVal = abiCoder.decode(["address[]"], performData);
+          expect(decodedVal[0][0]).to.be.equal(user);
+          assert(upkeepNeeded);
+        });
+        it("Should return the addresses of all who are default on payments", async () => {
+          const amountOutMin = 145000000000n;
+          const path = [
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", //weth
+            "0xdac17f958d2ee523a2206206994597c13d831ec7", //usdt
+          ];
+
+          const deadline = Math.floor(Date.now() / 1000) + 60 * 10;
+          const transactionResponse = await routerV2.swapExactETHForTokens(
+            amountOutMin,
+            path,
+            deployer,
+            deadline,
+            {
+              value: ethers.parseEther("43"),
+            }
+          );
+          await transactionResponse.wait(1);
+          const depBalanace = await usdt.balanceOf(deployer);
+          console.log(depBalanace);
+
+          const amountToOwn = 20n;
+          const firstInstallment = BigInt(30000);
+          await usdt
+            .connect(deployerSigner)
+            .approve(normalRental.target, firstInstallment * BigInt(1e6));
+          const tx2 = await normalRental
+            .connect(deployerSigner)
+            .mintOffplanInstallments(tokenId, amountToOwn, firstInstallment);
+          await tx2.wait(1);
+
+          //Add the same thing for user2
+          const txRes = await routerV2
+            .connect(user2Signer)
+            .swapExactETHForTokens(amountOutMin, path, user2, deadline, {
+              value: ethers.parseEther("43"),
+            });
+          await txRes.wait(1);
+
+          await network.provider.send("evm_increaseTime", [
+            parseInt(upkeepInterval) + 10,
+          ]);
+          await network.provider.request({ method: "evm_mine", params: [] });
+
+          await usdt
+            .connect(user2Signer)
+            .approve(normalRental.target, firstInstallment * BigInt(1e6));
+          const txn = await normalRental
+            .connect(user2Signer)
+            .mintOffplanInstallments(tokenId, amountToOwn, firstInstallment);
+          await txn.wait(1);
+
+          await network.provider.send("evm_increaseTime", [
+            parseInt(upkeepInterval) - 10,
+          ]);
+          await network.provider.request({ method: "evm_mine", params: [] });
+          const { upkeepNeeded, performData } =
+            await normalRental.checkUpkeep.staticCall("0x");
+          const abiCoder = AbiCoder.defaultAbiCoder();
+          const decodedVal = abiCoder.decode(["address[]"], performData);
+          assert(upkeepNeeded);
+          expect(decodedVal[0][0]).to.equal(user);
+          expect(decodedVal[0][1]).to.equal(deployer);
         });
       });
       //////////////////////////////////////////////

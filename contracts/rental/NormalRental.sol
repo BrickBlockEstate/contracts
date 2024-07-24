@@ -21,11 +21,6 @@ contract NormalRental is ERC1155, Ownable, AutomationCompatibleInterface {
     using SafeERC20 for IERC20;
 
     IERC20 private immutable i_usdt;
-    enum InstallmentHistory {
-        INITIALIZED,
-        PAID,
-        UNPAID
-    }
 
     struct Property {
         uint256 id;
@@ -41,7 +36,6 @@ contract NormalRental is ERC1155, Ownable, AutomationCompatibleInterface {
         address investor;
         uint256 remainingInstalmentsAmount;
         uint256 lastTimestamp;
-        InstallmentHistory previousInstallment;
     }
 
     string private constant BASE_EXTENSION = ".json";
@@ -196,8 +190,7 @@ contract NormalRental is ERC1155, Ownable, AutomationCompatibleInterface {
                 OffplanInvestor memory offplanInvestor = OffplanInvestor({
                     investor: msg.sender,
                     remainingInstalmentsAmount: remainingInstalments,
-                    lastTimestamp: block.timestamp,
-                    previousInstallment: InstallmentHistory.INITIALIZED
+                    lastTimestamp: block.timestamp
                 });
                 s_tokenIdToInstallments[_tokenId].push(offplanInvestor);
                 //----------------------------------
@@ -309,8 +302,7 @@ contract NormalRental is ERC1155, Ownable, AutomationCompatibleInterface {
                     s_tokenIdToInstallments[_tokenId][i] = OffplanInvestor({
                         investor: msg.sender,
                         remainingInstalmentsAmount: amountAfterTransfer,
-                        lastTimestamp: block.timestamp,
-                        previousInstallment: InstallmentHistory.PAID
+                        lastTimestamp: block.timestamp
                     });
                     //------------------------------
                     break;
