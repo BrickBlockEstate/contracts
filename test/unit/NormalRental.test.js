@@ -85,7 +85,8 @@ const { AbiCoder } = require("ethers");
             testURI,
             price,
             seed,
-            isOffplan
+            isOffplan,
+            { gasLimit: 50000000 }
           );
           await tx.wait(1);
 
@@ -953,8 +954,6 @@ const { AbiCoder } = require("ethers");
             }
           );
           await transactionResponse.wait(1);
-          const depBalanace = await usdt.balanceOf(deployer);
-          console.log(depBalanace);
 
           const amountToOwn = 20n;
           const firstInstallment = BigInt(30000);
@@ -995,9 +994,109 @@ const { AbiCoder } = require("ethers");
             await normalRental.checkUpkeep.staticCall("0x");
           const abiCoder = AbiCoder.defaultAbiCoder();
           const decodedVal = abiCoder.decode(["address[]"], performData);
+          console.log(decodedVal);
           assert(upkeepNeeded);
           expect(decodedVal[0][0]).to.equal(user);
           expect(decodedVal[0][1]).to.equal(deployer);
+        });
+      });
+
+      describe("performUpkeep function", async function () {
+        let tokenId, userBalance, installments;
+        /**
+         * 1. Add offplan property
+         * 2. Buy usdt for user
+         * 3. Buy an offplan investment
+         */
+        beforeEach(async () => {
+          // Admin adds a property
+          const price = BigInt(500000);
+          const seed = Math.floor(Math.random() * 5561234);
+          const isOffplan = true;
+
+          const tx = await normalRental.addProperty(
+            testURI,
+            price,
+            seed,
+            isOffplan
+          );
+          await tx.wait(1);
+
+          const tokenIds = await normalRental.getOffplanTokenIds();
+          tokenId = tokenIds[0];
+
+          // Investor/user buys some usdt
+          const amountOutMin = 145000000000n;
+          const path = [
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", //weth
+            "0xdac17f958d2ee523a2206206994597c13d831ec7", //usdt
+          ];
+
+          const deadline = Math.floor(Date.now() / 1000) + 60 * 10;
+          const transactionResponse = await routerV2
+            .connect(userSigner)
+            .swapExactETHForTokens(amountOutMin, path, user, deadline, {
+              value: ethers.parseEther("43"),
+            });
+          await transactionResponse.wait(1);
+          userBalance = await usdt.balanceOf(user);
+
+          // The investor/user mints an offplan property with installments
+          const amountToOwn = 20n;
+          const firstInstallment = BigInt(30000);
+          await usdt
+            .connect(userSigner)
+            .approve(normalRental.target, firstInstallment * BigInt(1e6));
+          const tx2 = await normalRental
+            .connect(userSigner)
+            .mintOffplanInstallments(tokenId, amountToOwn, firstInstallment);
+          await tx2.wait(1);
+
+          installments = await normalRental.getInstallments(tokenId);
+        });
+        it("Should be able to access defaulted investors in performUpkeep", async () => {
+          const amountOutMin = 145000000000n;
+          const path = [
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", //weth
+            "0xdac17f958d2ee523a2206206994597c13d831ec7", //usdt
+          ];
+
+          const deadline = Math.floor(Date.now() / 1000) + 60 * 10;
+          const transactionResponse = await routerV2.swapExactETHForTokens(
+            amountOutMin,
+            path,
+            deployer,
+            deadline,
+            {
+              value: ethers.parseEther("43"),
+            }
+          );
+          await transactionResponse.wait(1);
+
+          const amountToOwn = 20n;
+          const firstInstallment = BigInt(30000);
+          await usdt
+            .connect(deployerSigner)
+            .approve(normalRental.target, firstInstallment * BigInt(1e6));
+          const tx2 = await normalRental
+            .connect(deployerSigner)
+            .mintOffplanInstallments(tokenId, amountToOwn, firstInstallment);
+          await tx2.wait(1);
+
+          await network.provider.send("evm_increaseTime", [
+            parseInt(upkeepInterval) + 10,
+          ]);
+          await network.provider.request({ method: "evm_mine", params: [] });
+
+          const { performData } = await normalRental.checkUpkeep.staticCall(
+            "0x"
+          );
+
+          const transactionResponse2 = await normalRental.performUpkeep(
+            performData,
+            { gasLimit: 5000000 }
+          );
+          await transactionResponse2.wait(1);
         });
       });
       //////////////////////////////////////////////

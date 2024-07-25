@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.26;
 
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -38,6 +38,11 @@ contract NormalRental is ERC1155, Ownable, AutomationCompatibleInterface {
         uint256 lastTimestamp;
     }
 
+    struct MissedPayments {
+        address missedInvestor;
+        uint256 tokenId;
+    }
+
     string private constant BASE_EXTENSION = ".json";
     uint256 private s_currentTokenID;
     uint256[] private s_tokenIdsNormal;
@@ -59,6 +64,7 @@ contract NormalRental is ERC1155, Ownable, AutomationCompatibleInterface {
 
     event PropertyMinted(uint256 indexed tokenId_);
     event OffplanPropertyMinted(uint256 indexed tokenId_);
+    event DefaultedInvestors(address[] defaultedInvestors_);
 
     constructor(
         address _usdtAddress,
@@ -227,7 +233,8 @@ contract NormalRental is ERC1155, Ownable, AutomationCompatibleInterface {
             s_tokenIdsOffplan.length * 10
         );
         uint256 count = 0;
-
+        //Need to rewrite the checkupkeep
+        // It has to return a struct of tokenId and address
         for (uint256 i = 0; i < s_tokenIdsOffplan.length; i++) {
             uint256 tokenId = s_tokenIdsOffplan[i];
             OffplanInvestor[] storage investors = s_tokenIdToInstallments[
@@ -268,9 +275,43 @@ contract NormalRental is ERC1155, Ownable, AutomationCompatibleInterface {
         return (upkeepNeeded, performData);
     }
 
-    function performUpkeep(
-        bytes calldata /* performdata */
-    ) external override {}
+    function performUpkeep(bytes calldata performdata) external override {
+        (bool upkeepNeeded, ) = checkUpkeep("");
+
+        require(upkeepNeeded, "Upkeep Not needed");
+
+        address[] memory defaultedInvestors = abi.decode(
+            performdata,
+            (address[])
+        );
+
+        for (uint256 i = 0; i < defaultedInvestors.length; i++) {
+            address defaultedInvestor = defaultedInvestors[i];
+            for (uint256 j = 0; j < s_tokenIdsOffplan.length; j++) {
+                uint256 tokenId = s_tokenIdsOffplan[j];
+                OffplanInvestor[] storage investors = s_tokenIdToInstallments[
+                    tokenId
+                ];
+
+                for (uint256 k = 0; k < investors.length; k++) {
+                    if (investors[k].investor == defaultedInvestor) {
+                        console.log(
+                            "Investor amount",
+                            defaultedInvestor,
+                            tokenId,
+                            investors[k].remainingInstalmentsAmount
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    event InvestorDefaulted(
+        address indexed investor,
+        uint256 tokenId,
+        uint256 remainingInstalmentsAmount
+    );
 
     function payInstallments(uint256 _tokenId) external {
         bool foundInvestor = false;
@@ -373,7 +414,7 @@ contract NormalRental is ERC1155, Ownable, AutomationCompatibleInterface {
     }
 
     function _isValidUri(string memory _uri) internal pure returns (bool) {
-        bytes memory startsWith = bytes("https://nft.brickblock");
+        bytes memory startsWith = bytes("https://nft.brickblock.estate");
         bytes memory bytesUri = bytes(_uri);
 
         if (bytesUri.length < startsWith.length) {
