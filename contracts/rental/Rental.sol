@@ -24,6 +24,7 @@ contract Rental is ERC1155, Ownable {
     IERC20 private immutable i_usdt;
 
     uint256 private s_currentTokenID;
+    uint256[] private s_tokenIds;
     uint256 public constant DECIMALS = 10 ** 6;
     uint256 public constant MAX_MINT_PER_PROPERTY = 100;
     bool public paused = false;
@@ -69,6 +70,7 @@ contract Rental is ERC1155, Ownable {
             timestamp: block.timestamp
         });
         s_tokenIdToTokenURIs[newTokenID] = _uri;
+        s_tokenIds.push(newTokenID);
 
         emit PropertyMinted(newTokenID, _uri);
     }
@@ -76,45 +78,44 @@ contract Rental is ERC1155, Ownable {
     function mint(uint256 _tokenId, uint256 _amount) external {
         require(paused == false, "Minting Paused");
         require(_amount >= 1, "Min investment 1%");
+
         Property storage property = s_tokenIdToProperties[_tokenId];
         uint256 remainingSupply = MAX_MINT_PER_PROPERTY - property.amountMinted;
-
         require(remainingSupply >= _amount, "Not enough supply left");
-        uint256 usdtAmount = (property.price * _amount) / 100;
 
+        uint256 usdtAmount = (property.price * _amount) / 100;
         require(
             i_usdt.balanceOf(msg.sender) > usdtAmount,
             "Not enough balance"
         );
 
-        try this.attemptTransfer(msg.sender, address(this), usdtAmount) {
-            uint256 _newAmoutnGenerated = property.amountGenerated + usdtAmount;
-            property.amountGenerated = _newAmoutnGenerated;
-            property.amountMinted += _amount;
-            s_userToTokenIdToShares[msg.sender][_tokenId] += _amount;
+        uint256 newAmountGenerated = property.amountGenerated + usdtAmount;
+        property.amountGenerated = newAmountGenerated;
+        property.amountMinted += _amount;
+        s_userToTokenIdToShares[msg.sender][_tokenId] += _amount;
 
-            bool isInvestorPresent = false;
-            for (
-                uint256 i = 0;
-                i < s_tokenIdToInvestors[_tokenId].length;
-                i++
-            ) {
-                if (s_tokenIdToInvestors[_tokenId][i] == msg.sender) {
-                    isInvestorPresent = true;
-                    break;
-                }
+        bool isInvestorPresent = false;
+        for (uint256 i = 0; i < s_tokenIdToInvestors[_tokenId].length; i++) {
+            if (s_tokenIdToInvestors[_tokenId][i] == msg.sender) {
+                isInvestorPresent = true;
+                break;
             }
-            if (!isInvestorPresent) {
-                s_tokenIdToInvestors[_tokenId].push(msg.sender);
-            }
+        }
+        if (!isInvestorPresent) {
+            s_tokenIdToInvestors[_tokenId].push(msg.sender);
+        }
+        emit RentalSharesMinted(msg.sender, _tokenId, _amount, block.timestamp);
+
+        try this.attemptTransfer(msg.sender, address(this), usdtAmount) {
             _mint(msg.sender, _tokenId, _amount, "");
-            emit RentalSharesMinted(
-                msg.sender,
-                _tokenId,
-                _amount,
-                block.timestamp
-            );
         } catch {
+            // Revert state changes on failure
+            property.amountGenerated -= usdtAmount;
+            property.amountMinted -= _amount;
+            s_userToTokenIdToShares[msg.sender][_tokenId] -= _amount;
+            if (!isInvestorPresent) {
+                s_tokenIdToInvestors[_tokenId].pop();
+            }
             revert Rental__TRANSFER_FAILED_mint();
         }
     }
@@ -132,11 +133,13 @@ contract Rental is ERC1155, Ownable {
             "Property not found"
         );
 
-        //Approve first in the front-end / scripts
-        try this.attemptTransfer(msg.sender, address(this), _usdtAmount) {
-            s_tokenIdToRentGenerated[_tokenId] += _usdtAmount;
-            emit RentSubmitted(_tokenId, _usdtAmount);
-        } catch {
+        s_tokenIdToRentGenerated[_tokenId] += _usdtAmount;
+        emit RentSubmitted(_tokenId, _usdtAmount);
+
+        try
+            this.attemptTransfer(msg.sender, address(this), _usdtAmount)
+        {} catch {
+            s_tokenIdToRentGenerated[_tokenId] -= _usdtAmount;
             revert Rental__TRANSFER_FAILED_submitRent();
         }
     }
@@ -149,7 +152,6 @@ contract Rental is ERC1155, Ownable {
             i_usdt.safeTransfer(investor, amountToSend);
             s_userToTokenIdToShares[investor][_tokenId] -= amountToSend;
             s_tokenIdToRentGenerated[_tokenId] -= amountToSend;
-            emit RentDistributed(investor, amountToSend);
         }
     }
 
@@ -207,6 +209,10 @@ contract Rental is ERC1155, Ownable {
     /* View functions */
     function getTokenId() public view returns (uint256) {
         return s_currentTokenID;
+    }
+
+    function getTokenIds() public view returns (uint256[] memory) {
+        return s_tokenIds;
     }
 
     function uri(
