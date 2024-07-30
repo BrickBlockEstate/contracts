@@ -5,11 +5,13 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/interfaces/AutomationCompatibleInterface.sol";
 
-contract OffplanRental is ERC1155, Ownable {
+contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
     error OffplanRental__TRANSFER_FAILED_mint();
     error OffplanRental__ALREADY_HAVE_INSTALLMENTS_REMAINING();
     error OffplanRental__TRANSFER_FAILED_mintOffplanInstalments();
+    error OffplanRental__TRANSFER_FAILED_payInstallments();
 
     using SafeERC20 for IERC20;
 
@@ -18,6 +20,7 @@ contract OffplanRental is ERC1155, Ownable {
         uint256 remainingInstalmentsAmount;
         uint256 lastTimestamp;
         uint256 tokenId;
+        uint256 missedPayementCount;
     }
 
     struct OffplanProperty {
@@ -30,19 +33,15 @@ contract OffplanRental is ERC1155, Ownable {
         uint256 timestamp;
     }
 
-    struct MissedPayments {
-        address missedInvestor;
-        uint256 tokenId;
-    }
-
     IERC20 private immutable i_usdt;
 
     uint256 private s_currentTokenID;
     uint256[] private s_tokenIds;
     uint256 public constant DECIMALS = 10 ** 6;
     uint256 public constant MAX_MINT_PER_PROPERTY = 100;
-    uint256 private immutable i_keepersInterval;
+    uint256 private immutable i_gracePeriod;
     bool public paused;
+    address[] public s_consecutiveDefaulters;
 
     OffplanInvestor[] private s_investments;
 
@@ -66,14 +65,20 @@ contract OffplanRental is ERC1155, Ownable {
         uint256 indexed timestamp_,
         uint256 indexed tokenId_
     );
+    event InstallmentPaid(
+        address indexed investor_,
+        uint256 indexed tokenId_,
+        uint256 paidInstallment_,
+        uint256 remainingInstallment_
+    );
 
     constructor(
         address _usdtAddress,
-        uint56 _keepersInterval
+        uint56 _gracePeriod
     ) ERC1155("") Ownable(msg.sender) {
         i_usdt = IERC20(_usdtAddress);
         s_currentTokenID = 0;
-        i_keepersInterval = _keepersInterval;
+        i_gracePeriod = _gracePeriod;
     }
 
     function addPropertyOffplan(
@@ -101,6 +106,7 @@ contract OffplanRental is ERC1155, Ownable {
         emit OffplanPropertyMinted(newTokenID, _uri);
     }
 
+    //Requires a call to ERC20 Approve function in the front-end
     function mintOffplanProperty(uint256 _tokenId, uint256 _amount) external {
         require(paused == false, "Minting Paused");
         require(_amount >= 1, "Min investment 1%");
@@ -152,6 +158,7 @@ contract OffplanRental is ERC1155, Ownable {
         }
     }
 
+    //Requires a call to ERC20 approve function
     function mintOffplanInstallments(
         uint256 _tokenId,
         uint256 _amountToOwn,
@@ -190,7 +197,8 @@ contract OffplanRental is ERC1155, Ownable {
             investor: msg.sender,
             remainingInstalmentsAmount: amountAfterFirstInstallment,
             lastTimestamp: block.timestamp,
-            tokenId: _tokenId
+            tokenId: _tokenId,
+            missedPayementCount: 0
         });
         s_investments.push(investorData);
 
@@ -218,21 +226,153 @@ contract OffplanRental is ERC1155, Ownable {
         }
     }
 
-    function checkUpkeep() external {}
+    function checkUpkeep(
+        bytes memory /* _checkData */
+    )
+        public
+        view
+        override
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        upkeepNeeded = false;
+        OffplanInvestor[] memory investorsToUpdate = new OffplanInvestor[](
+            s_investments.length
+        );
+        uint256 count = 0;
+        for (uint256 i = 0; i < s_investments.length; i++) {
+            if (
+                block.timestamp - s_investments[i].lastTimestamp > i_gracePeriod
+            ) {
+                investorsToUpdate[count] = s_investments[i];
+                count++;
+                upkeepNeeded = true;
+            }
+        }
 
-    function performUpkeep() public {}
+        assembly {
+            mstore(investorsToUpdate, count)
+        }
 
-    function payInstallments() external {}
+        performData = abi.encode(investorsToUpdate);
+    }
+
+    function performUpkeep(bytes calldata performData) external override {
+        (bool upkeepNeeded, ) = checkUpkeep("");
+        require(upkeepNeeded, "upkeep not needed");
+
+        OffplanInvestor[] memory defaultedInvestors = abi.decode(
+            performData,
+            (OffplanInvestor[])
+        );
+
+        for (uint256 i = 0; i < defaultedInvestors.length; i++) {
+            for (uint256 j = 0; j < s_investments.length; j++) {
+                if (
+                    defaultedInvestors[i].investor == s_investments[j].investor
+                ) {
+                    OffplanInvestor storage investorData = s_investments[j];
+                    uint256 penalty = investorData.remainingInstalmentsAmount /
+                        20;
+                    investorData.remainingInstalmentsAmount += penalty;
+                    investorData.missedPayementCount += 1;
+                    if (investorData.missedPayementCount >= 3) {
+                        s_consecutiveDefaulters.push(investorData.investor);
+                    }
+                }
+            }
+        }
+    }
+
+    // Require a call to ERC20 `approve` function
+    function payInstallments(uint256 _tokenId) external {
+        for (uint256 i = 0; i < s_consecutiveDefaulters.length; i++) {
+            require(
+                s_consecutiveDefaulters[i] != msg.sender,
+                "3 payments missed"
+            );
+        }
+        bool foundInvestor = false;
+        for (uint256 i = 0; i < s_investments.length; i++) {
+            if (
+                s_investments[i].investor == msg.sender &&
+                s_investments[i].tokenId == _tokenId
+            ) {
+                require(
+                    s_investments[i].remainingInstalmentsAmount > 0,
+                    "No installments remaining"
+                );
+
+                OffplanInvestor storage foundInvestment = s_investments[i];
+                foundInvestor = true;
+
+                uint256 remainingInstallment = foundInvestment
+                    .remainingInstalmentsAmount;
+                uint256 installmentToPay = remainingInstallment / 6;
+                uint256 amountAfterTransfer = remainingInstallment -
+                    installmentToPay;
+
+                // State change
+                if (amountAfterTransfer == 0) {
+                    delete s_investments[i];
+                } else {
+                    foundInvestment
+                        .remainingInstalmentsAmount = amountAfterTransfer;
+                    foundInvestment.lastTimestamp = block.timestamp;
+                    if (foundInvestment.missedPayementCount > 0) {
+                        foundInvestment.missedPayementCount = 0;
+                    }
+                }
+                try
+                    this.attemptTransfer(
+                        msg.sender,
+                        address(this),
+                        installmentToPay
+                    )
+                {
+                    emit InstallmentPaid(
+                        msg.sender,
+                        _tokenId,
+                        installmentToPay,
+                        amountAfterTransfer
+                    );
+                } catch {
+                    if (amountAfterTransfer == 0) {
+                        s_investments.push(foundInvestment);
+                    } else {
+                        foundInvestment
+                            .remainingInstalmentsAmount = remainingInstallment;
+                    }
+                    revert OffplanRental__TRANSFER_FAILED_payInstallments();
+                }
+                break;
+            }
+        }
+
+        require(foundInvestor, "Investor not found");
+    }
 
     function pause(bool _state) external onlyOwner {
         paused = _state;
+    }
+
+    function removeBlacklist(address _blacklistedInvestor) external onlyOwner {
+        for (uint256 i = 0; i < s_consecutiveDefaulters.length; i++) {
+            require(
+                s_consecutiveDefaulters[i] == _blacklistedInvestor,
+                "Blacklisted investor not found"
+            );
+            if (s_consecutiveDefaulters[i] == _blacklistedInvestor) {
+                delete s_consecutiveDefaulters[i];
+                break;
+            }
+        }
     }
 
     function attemptTransfer(
         address _from,
         address _to,
         uint256 _amount
-    ) external {
+    ) public {
         require(msg.sender == address(this), "contract call only");
         i_usdt.safeTransferFrom(_from, _to, _amount);
     }

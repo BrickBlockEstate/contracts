@@ -149,9 +149,9 @@ contract Rental is ERC1155, Ownable {
         for (uint256 i = 0; i < s_tokenIdToInvestors[_tokenId].length; i++) {
             address investor = s_tokenIdToInvestors[_tokenId][i];
             uint256 amountToSend = s_userToTokenIdToShares[investor][_tokenId];
-            i_usdt.safeTransfer(investor, amountToSend);
             s_userToTokenIdToShares[investor][_tokenId] -= amountToSend;
             s_tokenIdToRentGenerated[_tokenId] -= amountToSend;
+            i_usdt.safeTransfer(investor, amountToSend);
         }
     }
 
@@ -201,7 +201,7 @@ contract Rental is ERC1155, Ownable {
         address _from,
         address _to,
         uint256 _amount
-    ) external {
+    ) public {
         require(msg.sender == address(this), "contract call only");
         i_usdt.safeTransferFrom(_from, _to, _amount);
     }

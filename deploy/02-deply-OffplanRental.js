@@ -12,11 +12,11 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
   const chainId = network.config.chainId;
 
   log("-------------------------------------------------");
-  log("Deploying Rental...");
+  log("Deploying OffplanRental...");
 
-  const constructorArgs = [networkConfig[chainId].usdt];
+  const constructorArgs = [networkConfig[chainId].usdt, upkeepInterval];
 
-  const rental = await deploy("Rental", {
+  const rental = await deploy("OffplanRental", {
     from: deployer,
     log: true,
     args: constructorArgs,
@@ -30,4 +30,4 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
   log("successfully deployed NormalRental...");
 };
 
-module.exports.tags = ["all", "Rental"];
+module.exports.tags = ["all", "OffplanRental"];

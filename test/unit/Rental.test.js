@@ -3,10 +3,8 @@ const {
   developmentChains,
   testURI,
   networkConfig,
-  upkeepInterval,
 } = require("../../helper-hardhat.confg");
 const { network, getNamedAccounts, ethers, deployments } = require("hardhat");
-const { AbiCoder } = require("ethers");
 
 !developmentChains.includes(network.name)
   ? describe.skip
