@@ -81,7 +81,7 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         i_gracePeriod = _gracePeriod;
     }
 
-    function addPropertyOffplan(
+    function addOffplanProperty(
         string memory _uri,
         uint256 _price,
         uint256 _seed
@@ -164,6 +164,10 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         uint256 _amountToOwn,
         uint256 _firstInstallment
     ) external {
+        require(
+            s_tokenIdToOffplanProperties[_tokenId].price > 0,
+            "Property not found"
+        );
         require(_amountToOwn >= 1, "Max investment 1%");
         require(paused == false, "Minting Paused");
 
@@ -172,7 +176,7 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         ];
 
         require(
-            MAX_MINT_PER_PROPERTY - property.amountMinted > 0,
+            MAX_MINT_PER_PROPERTY - property.amountMinted >= _amountToOwn,
             "Not enough supply"
         );
         require(
@@ -189,9 +193,9 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         uint256 firstInstallmentDecAdjusted = _firstInstallment * DECIMALS;
         uint256 totalPriceToPay = (property.price * _amountToOwn) / 100;
         uint256 amountAfterFirstInstallment = totalPriceToPay -
-            _firstInstallment;
+            firstInstallmentDecAdjusted;
 
-        property.amountGenerated += _firstInstallment;
+        property.amountGenerated += firstInstallmentDecAdjusted;
         property.amountInInstallments += _amountToOwn;
         OffplanInvestor memory investorData = OffplanInvestor({
             investor: msg.sender,
@@ -361,10 +365,7 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
                 s_consecutiveDefaulters[i] == _blacklistedInvestor,
                 "Blacklisted investor not found"
             );
-            if (s_consecutiveDefaulters[i] == _blacklistedInvestor) {
-                delete s_consecutiveDefaulters[i];
-                break;
-            }
+            delete s_consecutiveDefaulters[i];
         }
     }
 
@@ -411,5 +412,33 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         );
 
         return (uniqueNumber % 10 ** 20);
+    }
+
+    function getTokenId() public view returns (uint256) {
+        return s_currentTokenID;
+    }
+
+    function getUsdt() public view returns (address) {
+        return address(i_usdt);
+    }
+
+    function getProperties(
+        uint256 _tokenId
+    ) public view returns (OffplanProperty memory) {
+        return s_tokenIdToOffplanProperties[_tokenId];
+    }
+
+    function uri(
+        uint256 _tokenId
+    ) public view override returns (string memory) {
+        return s_tokenIdToTokenURIs[_tokenId];
+    }
+
+    function getTokenIds() public view returns (uint256[] memory) {
+        return s_tokenIds;
+    }
+
+    function getInvestments() public view returns (OffplanInvestor[] memory) {
+        return s_investments;
     }
 }
