@@ -9,6 +9,7 @@ deployments
 node_modules
 coverage
 coverage.json
+deleted/
 
 # don't push the environment vars!
 .env

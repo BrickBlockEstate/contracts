@@ -17,7 +17,9 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
 
     struct OffplanInvestor {
         address investor;
+        uint256 firstInstallment;
         uint256 remainingInstalmentsAmount;
+        uint256 sharesOwned;
         uint256 lastTimestamp;
         uint256 tokenId;
         uint256 missedPayementCount;
@@ -50,6 +52,7 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
     mapping(address => mapping(uint256 => uint256))
         private s_userToTokenIdToShares;
     mapping(uint256 => address[]) private s_tokenIdToInvestors;
+    mapping(address => uint256) private s_addressToPanaltyAmount;
 
     event OffplanPropertyMinted(uint256 indexed tokenId_, string indexed uri_);
     event OffplanSharesMinted(
@@ -70,6 +73,19 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         uint256 indexed tokenId_,
         uint256 paidInstallment_,
         uint256 remainingInstallment_
+    );
+
+    event SharesBurnedForConsecutiveMissedPayments(
+        address indexed investor_,
+        uint256 indexed tokenId_,
+        uint256 amountBurned_
+    );
+
+    event MissedAmountPenalty(
+        address indexed investor_,
+        uint256 indexed tokenId_,
+        uint256 penalty_,
+        uint256 remainingInstallmentsAmount_
     );
 
     constructor(
@@ -114,7 +130,8 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         OffplanProperty storage property = s_tokenIdToOffplanProperties[
             _tokenId
         ];
-        uint256 remainingSupply = MAX_MINT_PER_PROPERTY - property.amountMinted;
+        uint256 remainingSupply = MAX_MINT_PER_PROPERTY -
+            (property.amountMinted + property.amountInInstallments);
         require(remainingSupply >= _amount, "Not enough supply left");
 
         uint256 usdtAmount = (property.price * _amount) / 100;
@@ -176,7 +193,9 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         ];
 
         require(
-            MAX_MINT_PER_PROPERTY - property.amountMinted >= _amountToOwn,
+            MAX_MINT_PER_PROPERTY -
+                (property.amountMinted + property.amountInInstallments) >=
+                _amountToOwn,
             "Not enough supply"
         );
         require(
@@ -199,7 +218,9 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         property.amountInInstallments += _amountToOwn;
         OffplanInvestor memory investorData = OffplanInvestor({
             investor: msg.sender,
+            firstInstallment: firstInstallmentDecAdjusted,
             remainingInstalmentsAmount: amountAfterFirstInstallment,
+            sharesOwned: _amountToOwn,
             lastTimestamp: block.timestamp,
             tokenId: _tokenId,
             missedPayementCount: 0
@@ -275,12 +296,34 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
                     defaultedInvestors[i].investor == s_investments[j].investor
                 ) {
                     OffplanInvestor storage investorData = s_investments[j];
+                    address investor = investorData.investor;
                     uint256 penalty = investorData.remainingInstalmentsAmount /
                         20;
+                    s_addressToPanaltyAmount[investor] += penalty;
                     investorData.remainingInstalmentsAmount += penalty;
                     investorData.missedPayementCount += 1;
-                    if (investorData.missedPayementCount >= 3) {
-                        s_consecutiveDefaulters.push(investorData.investor);
+                    emit MissedAmountPenalty(
+                        investor,
+                        investorData.tokenId,
+                        penalty,
+                        investorData.remainingInstalmentsAmount
+                    );
+                    if (investorData.missedPayementCount == 3) {
+                        s_consecutiveDefaulters.push(investor);
+                        uint256 amountToSend = investorData.firstInstallment -
+                            s_addressToPanaltyAmount[investor];
+                        investorData.sharesOwned = 0;
+                        _burn(
+                            investor,
+                            investorData.tokenId,
+                            investorData.sharesOwned
+                        );
+                        i_usdt.safeTransfer(investor, amountToSend);
+                        emit SharesBurnedForConsecutiveMissedPayments(
+                            investorData.investor,
+                            investorData.tokenId,
+                            investorData.sharesOwned
+                        );
                     }
                 }
             }
@@ -414,25 +457,25 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         return (uniqueNumber % 10 ** 20);
     }
 
-    function getTokenId() public view returns (uint256) {
-        return s_currentTokenID;
-    }
+    // function getTokenId() public view returns (uint256) {
+    //     return s_currentTokenID;
+    // }
 
-    function getUsdt() public view returns (address) {
-        return address(i_usdt);
-    }
+    // function getUsdt() public view returns (address) {
+    //     return address(i_usdt);
+    // }
 
-    function getProperties(
-        uint256 _tokenId
-    ) public view returns (OffplanProperty memory) {
-        return s_tokenIdToOffplanProperties[_tokenId];
-    }
+    // function getProperties(
+    //     uint256 _tokenId
+    // ) public view returns (OffplanProperty memory) {
+    //     return s_tokenIdToOffplanProperties[_tokenId];
+    // }
 
-    function uri(
-        uint256 _tokenId
-    ) public view override returns (string memory) {
-        return s_tokenIdToTokenURIs[_tokenId];
-    }
+    // function uri(
+    //     uint256 _tokenId
+    // ) public view override returns (string memory) {
+    //     return s_tokenIdToTokenURIs[_tokenId];
+    // }
 
     function getTokenIds() public view returns (uint256[] memory) {
         return s_tokenIds;
@@ -440,5 +483,9 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
 
     function getInvestments() public view returns (OffplanInvestor[] memory) {
         return s_investments;
+    }
+
+    function getConsecutiveDefaulters() public view returns (address[] memory) {
+        return s_consecutiveDefaulters;
     }
 }
