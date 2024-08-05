@@ -312,12 +312,12 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
                         s_consecutiveDefaulters.push(investor);
                         uint256 amountToSend = investorData.firstInstallment -
                             s_addressToPanaltyAmount[investor];
-                        investorData.sharesOwned = 0;
                         _burn(
                             investor,
                             investorData.tokenId,
                             investorData.sharesOwned
                         );
+                        investorData.sharesOwned = 0;
                         i_usdt.safeTransfer(investor, amountToSend);
                         emit SharesBurnedForConsecutiveMissedPayments(
                             investorData.investor,
@@ -457,6 +457,11 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         return (uniqueNumber % 10 ** 20);
     }
 
+                                /////////////////////////////////////////////////////////////
+                                //                  Before running tests                   //
+                                //              uncomment fthe following lines             //
+                                /////////////////////////////////////////////////////////////
+
     // function getTokenId() public view returns (uint256) {
     //     return s_currentTokenID;
     // }
@@ -477,15 +482,15 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
     //     return s_tokenIdToTokenURIs[_tokenId];
     // }
 
-    function getTokenIds() public view returns (uint256[] memory) {
-        return s_tokenIds;
-    }
+    // function getTokenIds() public view returns (uint256[] memory) {
+    //     return s_tokenIds;
+    // }
 
-    function getInvestments() public view returns (OffplanInvestor[] memory) {
-        return s_investments;
-    }
+    // function getInvestments() public view returns (OffplanInvestor[] memory) {
+    //     return s_investments;
+    // }
 
-    function getConsecutiveDefaulters() public view returns (address[] memory) {
-        return s_consecutiveDefaulters;
-    }
+    // function getConsecutiveDefaulters() public view returns (address[] memory) {
+    //     return s_consecutiveDefaulters;
+    // }
 }

@@ -8,6 +8,12 @@ const {
 const { network, getNamedAccounts, ethers, deployments } = require("hardhat");
 const { AbiCoder } = require("ethers");
 
+/////////////////////////////////////////////////////////////
+//                  Before running tests                   //
+//      uncomment view functions in the OffplanRental      //
+//                        contract                         //
+/////////////////////////////////////////////////////////////
+
 !developmentChains.includes(network.name)
   ? describe.skip
   : describe("OffplanRental unit tests", function () {
@@ -733,6 +739,7 @@ const { AbiCoder } = require("ethers");
           expect(investmentsData[1][2]).to.be.lessThan(invData[1][2]);
         });
         it("Should push the investors in the consecutive defaulters array", async () => {
+          const userBalBefore = await usdt.balanceOf(user);
           for (let i = 0; i < 4; i++) {
             await network.provider.send("evm_increaseTime", [
               parseInt(upkeepInterval) + 10,
@@ -751,8 +758,18 @@ const { AbiCoder } = require("ethers");
           }
 
           const defaulters = await offplanRental.getConsecutiveDefaulters();
-          console.log(defaulters);
-          // assert.equal(defaulters[0], user);
+
+          assert.equal(defaulters[0], user);
+
+          const investorData = await offplanRental.getInvestments();
+          console.log(investorData);
+          assert.equal(investorData[0][3], 0n);
+
+          const investorShares = await offplanRental.balanceOf(user, tokenId);
+          assert.equal(investorShares, 0n);
+
+          const userBalAfter = await usdt.balanceOf(user);
+          assert(userBalAfter > userBalBefore);
         });
       });
     });

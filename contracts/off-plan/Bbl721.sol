@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.26;
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -41,4 +41,8 @@ contract Bbl721 is ERC721URIStorage, Ownable {
     function getTokenCounter() public view returns (uint256) {
         return s_tokenIdCounter;
     }
+
+    /**
+     * What do we want here?
+     */
 }
