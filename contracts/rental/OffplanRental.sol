@@ -457,14 +457,14 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         return (uniqueNumber % 10 ** 20);
     }
 
-                                /////////////////////////////////////////////////////////////
-                                //                  Before running tests                   //
-                                //              uncomment fthe following lines             //
-                                /////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////
+    //                  Before running tests                   //
+    //              uncomment fthe following lines             //
+    /////////////////////////////////////////////////////////////
 
-    // function getTokenId() public view returns (uint256) {
-    //     return s_currentTokenID;
-    // }
+    function getTokenId() public view returns (uint256) {
+        return s_currentTokenID;
+    }
 
     // function getUsdt() public view returns (address) {
     //     return address(i_usdt);
@@ -476,11 +476,11 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
     //     return s_tokenIdToOffplanProperties[_tokenId];
     // }
 
-    // function uri(
-    //     uint256 _tokenId
-    // ) public view override returns (string memory) {
-    //     return s_tokenIdToTokenURIs[_tokenId];
-    // }
+    function uri(
+        uint256 _tokenId
+    ) public view override returns (string memory) {
+        return s_tokenIdToTokenURIs[_tokenId];
+    }
 
     // function getTokenIds() public view returns (uint256[] memory) {
     //     return s_tokenIds;

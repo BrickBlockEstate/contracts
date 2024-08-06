@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.26;
 
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import {ERC721, ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Bbl721 is ERC721URIStorage, Ownable {
+contract FractionalOwnership is ERC721URIStorage, Ownable {
     struct Property {
         uint256 price;
         address owner;
@@ -38,11 +38,13 @@ contract Bbl721 is ERC721URIStorage, Ownable {
         _safeMint(msg.sender, currentTokenId);
     }
 
+    function buyOwnership(uint256 _tokenId) external {}
+
     function getTokenCounter() public view returns (uint256) {
         return s_tokenIdCounter;
     }
 
-    /**
-     * What do we want here?
-     */
+    function getURI(address _user) public view returns (string[] memory) {
+        return s_ownerToTokenUri[_user];
+    }
 }

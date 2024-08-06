@@ -21,6 +21,7 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
     log: true,
     args: constructorArgs,
     waitConfirmations: network.config.blockConfirmations || 1,
+    gasLimit: 6000000,
   });
 
   if (!developmentChains.includes(network.name)) {
