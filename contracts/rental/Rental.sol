@@ -7,11 +7,12 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract Rental is ERC1155, Ownable {
+    /* Custom error codes */
     error Rental__TRANSFER_FAILED_mint();
     error Rental__TRANSFER_FAILED_submitRent();
-
+    /* Safe ERC20 for USDT function calls */
     using SafeERC20 for IERC20;
-
+    /* TYpe declarations */
     struct Property {
         uint256 id;
         uint256 price;
@@ -22,20 +23,20 @@ contract Rental is ERC1155, Ownable {
     }
 
     IERC20 private immutable i_usdt;
-
+    /* State variables */
     uint256 private s_currentTokenID;
     uint256[] private s_tokenIds;
     uint256 public constant DECIMALS = 10 ** 6;
     uint256 public constant MAX_MINT_PER_PROPERTY = 100;
     bool public paused = false;
-
+    /* Mappings */
     mapping(uint256 => Property) private s_tokenIdToProperties;
     mapping(uint256 => string) private s_tokenIdToTokenURIs;
     mapping(address => mapping(uint256 => uint256))
         private s_userToTokenIdToShares;
     mapping(uint256 => address[]) private s_tokenIdToInvestors;
     mapping(uint256 => uint256) private s_tokenIdToRentGenerated;
-
+    /* Evenets */
     event PropertyMinted(uint256 indexed tokenId_, string indexed uri_);
     event RentalSharesMinted(
         address indexed investor_,

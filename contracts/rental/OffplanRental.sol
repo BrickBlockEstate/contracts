@@ -8,13 +8,14 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/interfaces/AutomationCompatibleInterface.sol";
 
 contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
+    /* Custom Error codes */
     error OffplanRental__TRANSFER_FAILED_mint();
     error OffplanRental__ALREADY_HAVE_INSTALLMENTS_REMAINING();
     error OffplanRental__TRANSFER_FAILED_mintOffplanInstalments();
     error OffplanRental__TRANSFER_FAILED_payInstallments();
-
+    /* SafeERC20 for USDT function calls */
     using SafeERC20 for IERC20;
-
+    /* Type declarations */
     struct OffplanInvestor {
         address investor;
         uint256 firstInstallment;
@@ -34,9 +35,10 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         uint256 amountGenerated;
         uint256 timestamp;
     }
+    OffplanInvestor[] private s_investments;
 
     IERC20 private immutable i_usdt;
-
+    /* State Variables */
     uint256 private s_currentTokenID;
     uint256[] private s_tokenIds;
     uint256 public constant DECIMALS = 10 ** 6;
@@ -44,16 +46,14 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
     uint256 private immutable i_gracePeriod;
     bool public paused;
     address[] public s_consecutiveDefaulters;
-
-    OffplanInvestor[] private s_investments;
-
+    /* Mappings */
     mapping(uint256 => OffplanProperty) private s_tokenIdToOffplanProperties;
     mapping(uint256 => string) private s_tokenIdToTokenURIs;
     mapping(address => mapping(uint256 => uint256))
         private s_userToTokenIdToShares;
     mapping(uint256 => address[]) private s_tokenIdToInvestors;
     mapping(address => uint256) private s_addressToPanaltyAmount;
-
+    /* Events */
     event OffplanPropertyMinted(uint256 indexed tokenId_, string indexed uri_);
     event OffplanSharesMinted(
         address indexed investor_,
@@ -185,7 +185,7 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
             s_tokenIdToOffplanProperties[_tokenId].price > 0,
             "Property not found"
         );
-        require(_amountToOwn >= 1, "Max investment 1%");
+        require(_amountToOwn >= 1, "Min investment 1%");
         require(paused == false, "Minting Paused");
 
         OffplanProperty storage property = s_tokenIdToOffplanProperties[
@@ -308,8 +308,11 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
                         penalty,
                         investorData.remainingInstalmentsAmount
                     );
-                    if (investorData.missedPayementCount == 3) {
+
+                    // Check if the investor has missed 3 consecutive payments
+                    if (investorData.missedPayementCount >= 3) {
                         s_consecutiveDefaulters.push(investor);
+
                         uint256 amountToSend = investorData.firstInstallment -
                             s_addressToPanaltyAmount[investor];
                         _burn(
@@ -317,13 +320,20 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
                             investorData.tokenId,
                             investorData.sharesOwned
                         );
-                        investorData.sharesOwned = 0;
+                        s_investments[j] = s_investments[
+                            s_investments.length - 1
+                        ];
+                        s_investments.pop();
                         i_usdt.safeTransfer(investor, amountToSend);
                         emit SharesBurnedForConsecutiveMissedPayments(
                             investorData.investor,
                             investorData.tokenId,
                             investorData.sharesOwned
                         );
+                        j--;
+                    } else {
+                        // Update the lastTimestamp to the current time after handling the missed payment
+                        investorData.lastTimestamp = block.timestamp;
                     }
                 }
             }
@@ -365,6 +375,7 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
                     foundInvestment
                         .remainingInstalmentsAmount = amountAfterTransfer;
                     foundInvestment.lastTimestamp = block.timestamp;
+                    foundInvestment.firstInstallment += installmentToPay;
                     if (foundInvestment.missedPayementCount > 0) {
                         foundInvestment.missedPayementCount = 0;
                     }

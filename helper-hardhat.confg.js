@@ -11,7 +11,8 @@ const networkConfig = {
   },
 };
 
-const upkeepInterval = "10800";
+const upkeepInterval = "600"; // 10 minutes in seconds
+
 const developmentChains = ["hardhat", "localhost"];
 
 let uriStartsWithBytes = ethers.toUtf8Bytes("https://nft.brickblock.estate");
