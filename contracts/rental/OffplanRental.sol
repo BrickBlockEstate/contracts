@@ -266,7 +266,8 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         uint256 count = 0;
         for (uint256 i = 0; i < s_investments.length; i++) {
             if (
-                block.timestamp - s_investments[i].lastTimestamp > i_gracePeriod
+                block.timestamp - s_investments[i].lastTimestamp >=
+                i_gracePeriod
             ) {
                 investorsToUpdate[count] = s_investments[i];
                 count++;
@@ -320,17 +321,17 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
                             investorData.tokenId,
                             investorData.sharesOwned
                         );
-                        s_investments[j] = s_investments[
-                            s_investments.length - 1
-                        ];
+                        investorData = s_investments[s_investments.length - 1];
                         s_investments.pop();
+                        if (j > 0) {
+                            j--;
+                        }
                         i_usdt.safeTransfer(investor, amountToSend);
                         emit SharesBurnedForConsecutiveMissedPayments(
                             investorData.investor,
                             investorData.tokenId,
                             investorData.sharesOwned
                         );
-                        j--;
                     } else {
                         // Update the lastTimestamp to the current time after handling the missed payment
                         investorData.lastTimestamp = block.timestamp;
@@ -413,16 +414,6 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         paused = _state;
     }
 
-    function removeBlacklist(address _blacklistedInvestor) external onlyOwner {
-        for (uint256 i = 0; i < s_consecutiveDefaulters.length; i++) {
-            require(
-                s_consecutiveDefaulters[i] == _blacklistedInvestor,
-                "Blacklisted investor not found"
-            );
-            delete s_consecutiveDefaulters[i];
-        }
-    }
-
     function attemptTransfer(
         address _from,
         address _to,
@@ -487,21 +478,21 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
     //     return s_tokenIdToOffplanProperties[_tokenId];
     // }
 
-    function uri(
-        uint256 _tokenId
-    ) public view override returns (string memory) {
-        return s_tokenIdToTokenURIs[_tokenId];
+    // function uri(
+    //     uint256 _tokenId
+    // ) public view override returns (string memory) {
+    //     return s_tokenIdToTokenURIs[_tokenId];
+    // }
+
+    function getTokenIds() public view returns (uint256[] memory) {
+        return s_tokenIds;
     }
 
-    // function getTokenIds() public view returns (uint256[] memory) {
-    //     return s_tokenIds;
-    // }
+    function getInvestments() public view returns (OffplanInvestor[] memory) {
+        return s_investments;
+    }
 
-    // function getInvestments() public view returns (OffplanInvestor[] memory) {
-    //     return s_investments;
-    // }
-
-    // function getConsecutiveDefaulters() public view returns (address[] memory) {
-    //     return s_consecutiveDefaulters;
-    // }
+    function getConsecutiveDefaulters() public view returns (address[] memory) {
+        return s_consecutiveDefaulters;
+    }
 }

@@ -11,7 +11,7 @@ const networkConfig = {
   },
 };
 
-const upkeepInterval = "600"; // 10 minutes in seconds
+const upkeepInterval = "180"; // 5 minutes in seconds
 
 const developmentChains = ["hardhat", "localhost"];
 
