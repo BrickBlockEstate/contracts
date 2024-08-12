@@ -354,7 +354,7 @@ const { AbiCoder } = require("ethers");
 
           await expect(
             offplanRental.mintOffplanInstallments(tokenId, amountToOwn, 20000n)
-          ).to.be.revertedWith("Max investment 1%");
+          ).to.be.revertedWith("Min investment 1%");
         });
         it("Should revert if the investor already has pending instalments", async () => {
           const amountToOwn = 10n;

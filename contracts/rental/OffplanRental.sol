@@ -24,6 +24,7 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         uint256 lastTimestamp;
         uint256 tokenId;
         uint256 missedPayementCount;
+        uint256 monthlyPayment;
     }
 
     struct OffplanProperty {
@@ -86,6 +87,12 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         uint256 indexed tokenId_,
         uint256 penalty_,
         uint256 remainingInstallmentsAmount_
+    );
+
+    event CompletedInstallments(
+        address indexed investor_,
+        uint256 indexed tokenId_,
+        uint256 sharesOwned
     );
 
     constructor(
@@ -213,6 +220,7 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         uint256 totalPriceToPay = (property.price * _amountToOwn) / 100;
         uint256 amountAfterFirstInstallment = totalPriceToPay -
             firstInstallmentDecAdjusted;
+        uint256 monthlyPayment = amountAfterFirstInstallment / 6;
 
         property.amountGenerated += firstInstallmentDecAdjusted;
         property.amountInInstallments += _amountToOwn;
@@ -223,7 +231,8 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
             sharesOwned: _amountToOwn,
             lastTimestamp: block.timestamp,
             tokenId: _tokenId,
-            missedPayementCount: 0
+            missedPayementCount: 0,
+            monthlyPayment: monthlyPayment
         });
         s_investments.push(investorData);
 
@@ -356,51 +365,53 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
                 s_investments[i].tokenId == _tokenId
             ) {
                 require(
-                    s_investments[i].remainingInstalmentsAmount > 0,
+                    s_investments[i].remainingInstalmentsAmount > 10,
                     "No installments remaining"
                 );
 
                 OffplanInvestor storage foundInvestment = s_investments[i];
                 foundInvestor = true;
 
-                uint256 remainingInstallment = foundInvestment
+                uint256 payment = foundInvestment.monthlyPayment;
+                uint256 remainingAmount = foundInvestment
                     .remainingInstalmentsAmount;
-                uint256 installmentToPay = remainingInstallment / 6;
-                uint256 amountAfterTransfer = remainingInstallment -
-                    installmentToPay;
+                uint256 amountAfterTransfer = remainingAmount > payment
+                    ? remainingAmount - payment
+                    : 0;
 
                 // State change
-                if (amountAfterTransfer == 0) {
-                    delete s_investments[i];
+                if (amountAfterTransfer <= 10) {
+                    // Checking for near-zero values
+                    s_investments[i] = s_investments[s_investments.length - 1];
+                    s_investments.pop();
+                    emit CompletedInstallments(
+                        foundInvestment.investor,
+                        foundInvestment.tokenId,
+                        foundInvestment.sharesOwned
+                    );
+                    if (i > 0) {
+                        i--;
+                    }
                 } else {
                     foundInvestment
                         .remainingInstalmentsAmount = amountAfterTransfer;
                     foundInvestment.lastTimestamp = block.timestamp;
-                    foundInvestment.firstInstallment += installmentToPay;
+                    foundInvestment.firstInstallment += payment;
                     if (foundInvestment.missedPayementCount > 0) {
                         foundInvestment.missedPayementCount = 0;
                     }
                 }
-                try
-                    this.attemptTransfer(
-                        msg.sender,
-                        address(this),
-                        installmentToPay
-                    )
-                {
+
+                try this.attemptTransfer(msg.sender, address(this), payment) {
                     emit InstallmentPaid(
                         msg.sender,
                         _tokenId,
-                        installmentToPay,
+                        payment,
                         amountAfterTransfer
                     );
                 } catch {
-                    if (amountAfterTransfer == 0) {
-                        s_investments.push(foundInvestment);
-                    } else {
-                        foundInvestment
-                            .remainingInstalmentsAmount = remainingInstallment;
-                    }
+                    foundInvestment
+                        .remainingInstalmentsAmount = remainingAmount; // Revert changes on failure
                     revert OffplanRental__TRANSFER_FAILED_payInstallments();
                 }
                 break;
@@ -459,40 +470,19 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         return (uniqueNumber % 10 ** 20);
     }
 
-    /////////////////////////////////////////////////////////////
-    //                  Before running tests                   //
-    //              uncomment fthe following lines             //
-    /////////////////////////////////////////////////////////////
-
-    function getTokenId() public view returns (uint256) {
-        return s_currentTokenID;
+    function getProperties(
+        uint256 _tokenId
+    ) public view returns (OffplanProperty memory) {
+        return s_tokenIdToOffplanProperties[_tokenId];
     }
 
-    // function getUsdt() public view returns (address) {
-    //     return address(i_usdt);
-    // }
-
-    // function getProperties(
-    //     uint256 _tokenId
-    // ) public view returns (OffplanProperty memory) {
-    //     return s_tokenIdToOffplanProperties[_tokenId];
-    // }
-
-    // function uri(
-    //     uint256 _tokenId
-    // ) public view override returns (string memory) {
-    //     return s_tokenIdToTokenURIs[_tokenId];
-    // }
-
-    function getTokenIds() public view returns (uint256[] memory) {
-        return s_tokenIds;
+    function uri(
+        uint256 _tokenId
+    ) public view override returns (string memory) {
+        return s_tokenIdToTokenURIs[_tokenId];
     }
 
     function getInvestments() public view returns (OffplanInvestor[] memory) {
         return s_investments;
-    }
-
-    function getConsecutiveDefaulters() public view returns (address[] memory) {
-        return s_consecutiveDefaulters;
     }
 }
