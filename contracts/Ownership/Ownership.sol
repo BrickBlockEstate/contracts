@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {ERC721, ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract FractionalOwnership is ERC721URIStorage, Ownable {
+contract Ownership is ERC721URIStorage, Ownable {
     struct Property {
         uint256 price;
         address owner;

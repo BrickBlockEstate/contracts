@@ -7,15 +7,15 @@ module.exports = async ({ deployments, getNamedAccounts }) => {
   log("-------------------------------------------------");
   log("Deploying FractionalOwnership...");
 
-  const fractionalOwnership = await deploy("FractionalOwnership", {
+  const Ownership = await deploy("Ownership", {
     from: deployer,
     log: true,
     args: [],
     waitConfirmations: network.config.blockConfirmations || 1,
   });
 
-  log("Successfully deployed Bbl721");
+  log("Successfully deployed Ownership contract");
   log("-------------------------------------------------");
 };
 
-module.exports.tags = ["all", "bbl721"];
+module.exports.tags = ["all", "Ownership"];

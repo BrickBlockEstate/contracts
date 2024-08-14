@@ -4,17 +4,14 @@ const { network, getNamedAccounts, ethers, deployments } = require("hardhat");
 
 !developmentChains.includes(network.name)
   ? describe.skip
-  : describe("FractionalOwnership unit tests", () => {
-      let fractionalOwnership, deployer, user;
+  : describe("ownership unit tests", () => {
+      let ownership, deployer, user;
       const chainId = network.config.chainId;
       beforeEach(async function () {
         deployer = (await getNamedAccounts()).deployer;
         user = (await getNamedAccounts()).user;
         await deployments.fixture(["all"]);
-        fractionalOwnership = await ethers.getContract(
-          "FractionalOwnership",
-          deployer
-        );
+        ownership = await ethers.getContract("Ownership", deployer);
       });
 
       describe("addListing function", function () {
@@ -22,11 +19,10 @@ const { network, getNamedAccounts, ethers, deployments } = require("hardhat");
           const tokenURI = testURI;
           const price = 500000;
           const tokenIdCount = 0;
-          const tx = await fractionalOwnership.addListing(testURI, price);
+          const tx = await ownership.addListing(testURI, price);
           await tx.wait(1);
 
-          const updatedTokeIdCount =
-            await fractionalOwnership.getTokenCounter();
+          const updatedTokeIdCount = await ownership.getTokenCounter();
 
           assert(updatedTokeIdCount > tokenIdCount);
         });

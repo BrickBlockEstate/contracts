@@ -309,6 +309,8 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
                     address investor = investorData.investor;
                     uint256 penalty = investorData.remainingInstalmentsAmount /
                         20;
+                    uint256 monthlyPenalty = investorData.monthlyPayment / 20;
+                    investorData.monthlyPayment += monthlyPenalty;
                     s_addressToPanaltyAmount[investor] += penalty;
                     investorData.remainingInstalmentsAmount += penalty;
                     investorData.missedPayementCount += 1;
