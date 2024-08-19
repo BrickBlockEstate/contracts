@@ -6,16 +6,19 @@ import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/interfaces/AutomationCompatibleInterface.sol";
+import {IOffplanRentalEvents} from "./interfaces/IOffplanRentalEvents.sol";
+import {IOffplanRentalErrors} from "./interfaces/IOffplanRentalErrors.sol";
+import {OffplanRentalUtils} from "./libs/OffplanRentalUtils.sol";
 
-contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
-    /* Custom Error codes */
-    error OffplanRental__TRANSFER_FAILED_mint();
-    error OffplanRental__ALREADY_HAVE_INSTALLMENTS_REMAINING();
-    error OffplanRental__TRANSFER_FAILED_mintOffplanInstalments();
-    error OffplanRental__TRANSFER_FAILED_payInstallments();
-    /* SafeERC20 for USDT function calls */
+contract OffplanRental is
+    ERC1155,
+    Ownable,
+    AutomationCompatibleInterface,
+    IOffplanRentalEvents,
+    IOffplanRentalErrors
+{
     using SafeERC20 for IERC20;
-    /* Type declarations */
+
     struct OffplanInvestor {
         address investor;
         uint256 firstInstallment;
@@ -54,46 +57,6 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         private s_userToTokenIdToShares;
     mapping(uint256 => address[]) private s_tokenIdToInvestors;
     mapping(address => uint256) private s_addressToPanaltyAmount;
-    /* Events */
-    event OffplanPropertyMinted(uint256 indexed tokenId_, string indexed uri_);
-    event OffplanSharesMinted(
-        address indexed investor_,
-        uint256 indexed tokenId_,
-        uint256 amount_,
-        uint256 timestamp_
-    );
-    event PropertyMintedInstallments(
-        address indexed investor_,
-        uint256 firstInstallment_,
-        uint256 remainingAmountToPay_,
-        uint256 indexed timestamp_,
-        uint256 indexed tokenId_
-    );
-    event InstallmentPaid(
-        address indexed investor_,
-        uint256 indexed tokenId_,
-        uint256 paidInstallment_,
-        uint256 remainingInstallment_
-    );
-
-    event SharesBurnedForConsecutiveMissedPayments(
-        address indexed investor_,
-        uint256 indexed tokenId_,
-        uint256 amountBurned_
-    );
-
-    event MissedAmountPenalty(
-        address indexed investor_,
-        uint256 indexed tokenId_,
-        uint256 penalty_,
-        uint256 remainingInstallmentsAmount_
-    );
-
-    event CompletedInstallments(
-        address indexed investor_,
-        uint256 indexed tokenId_,
-        uint256 sharesOwned
-    );
 
     constructor(
         address _usdtAddress,
@@ -109,9 +72,16 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
         uint256 _price,
         uint256 _seed
     ) external onlyOwner {
-        require(_isValidUri(_uri), "Please place a valid URI");
+        require(
+            OffplanRentalUtils.isValidUri(_uri),
+            "Please place a valid URI"
+        );
         require(_price > 0 && _seed > 0, "Please enter appropriate values");
-        uint256 newTokenID = uniqueId(_seed, msg.sender);
+        uint256 newTokenID = OffplanRentalUtils.uniqueId(
+            _seed,
+            msg.sender,
+            s_currentTokenID
+        );
         s_currentTokenID = newTokenID;
         uint256 priceDecimals = _price * DECIMALS;
         s_tokenIdToOffplanProperties[newTokenID] = OffplanProperty({
@@ -384,13 +354,13 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
                 // State change
                 if (amountAfterTransfer <= 10) {
                     // Checking for near-zero values
-                    s_investments[i] = s_investments[s_investments.length - 1];
-                    s_investments.pop();
                     emit CompletedInstallments(
                         foundInvestment.investor,
                         foundInvestment.tokenId,
                         foundInvestment.sharesOwned
                     );
+                    s_investments[i] = s_investments[s_investments.length - 1];
+                    s_investments.pop();
                     if (i > 0) {
                         i--;
                     }
@@ -434,42 +404,6 @@ contract OffplanRental is ERC1155, Ownable, AutomationCompatibleInterface {
     ) public {
         require(msg.sender == address(this), "contract call only");
         i_usdt.safeTransferFrom(_from, _to, _amount);
-    }
-
-    function _isValidUri(string memory _uri) internal pure returns (bool) {
-        bytes memory startsWith = bytes("https://nft.brickblock.estate");
-        bytes memory bytesUri = bytes(_uri);
-
-        if (bytesUri.length < startsWith.length) {
-            return false;
-        }
-
-        for (uint256 i = 0; i < startsWith.length; i++) {
-            if (bytesUri[i] != startsWith[i]) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    function uniqueId(
-        uint256 _seed,
-        address _caller
-    ) public view returns (uint256) {
-        uint256 uniqueNumber = uint256(
-            keccak256(
-                abi.encodePacked(
-                    blockhash(block.number - 1),
-                    block.timestamp,
-                    _caller,
-                    _seed,
-                    s_currentTokenID
-                )
-            )
-        );
-
-        return (uniqueNumber % 10 ** 20);
     }
 
     function getProperties(
