@@ -6,4 +6,5 @@ interface IOffplanRentalErrors {
     error OffplanRental__ALREADY_HAVE_INSTALLMENTS_REMAINING();
     error OffplanRental__TRANSFER_FAILED_mintOffplanInstalments();
     error OffplanRental__TRANSFER_FAILED_payInstallments();
+    error Ownership__Transfer_Failed_withdraw();
 }

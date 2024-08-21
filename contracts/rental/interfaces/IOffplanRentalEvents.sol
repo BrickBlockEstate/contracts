@@ -41,4 +41,6 @@ interface IOffplanRentalEvents {
         uint256 indexed tokenId_,
         uint256 sharesOwned
     );
+
+    event WithdrawSuccessful(address indexed owner_, uint256 amountWithdrawn_);
 }

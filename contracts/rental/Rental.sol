@@ -10,6 +10,7 @@ contract Rental is ERC1155, Ownable {
     /* Custom error codes */
     error Rental__TRANSFER_FAILED_mint();
     error Rental__TRANSFER_FAILED_submitRent();
+    error Ownership__Transfer_Failed_withdraw();
     /* Safe ERC20 for USDT function calls */
     using SafeERC20 for IERC20;
     /* TYpe declarations */
@@ -37,6 +38,7 @@ contract Rental is ERC1155, Ownable {
     mapping(uint256 => address[]) private s_tokenIdToInvestors;
     mapping(uint256 => uint256) private s_tokenIdToRentGenerated;
     /* Evenets */
+    event WithdrawSuccessful(address indexed owner_, uint256 amountWithdrawn_);
     event PropertyMinted(uint256 indexed tokenId_, string indexed uri_);
     event RentalSharesMinted(
         address indexed investor_,
@@ -158,6 +160,15 @@ contract Rental is ERC1155, Ownable {
 
     function pause(bool _state) external onlyOwner {
         paused = _state;
+    }
+
+    function withdraw() external onlyOwner {
+        uint256 contractBalance = i_usdt.balanceOf(address(this));
+        require(contractBalance > 0, "Contract empty");
+
+        i_usdt.safeTransfer(msg.sender, contractBalance);
+
+        emit WithdrawSuccessful(msg.sender, contractBalance);
     }
 
     /* Helper Functions */

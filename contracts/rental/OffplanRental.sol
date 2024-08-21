@@ -397,6 +397,15 @@ contract OffplanRental is
         paused = _state;
     }
 
+    function withdraw() external onlyOwner {
+        uint256 contractBalance = i_usdt.balanceOf(address(this));
+        require(contractBalance > 0, "Contract empty");
+
+        i_usdt.safeTransfer(msg.sender, contractBalance);
+
+        emit WithdrawSuccessful(msg.sender, contractBalance);
+    }
+
     function attemptTransfer(
         address _from,
         address _to,

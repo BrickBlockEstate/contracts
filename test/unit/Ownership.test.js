@@ -127,4 +127,42 @@ const { network, getNamedAccounts, ethers, deployments } = require("hardhat");
           assert(nftOwner, user);
         });
       });
+      describe("withdraw function", function () {
+        beforeEach(async () => {
+          const price = 10000n;
+          const transaction = await ownership.addListing(testURI, price);
+          await transaction.wait(1);
+          const tokenId = await ownership.getTokenCounter();
+
+          const amountOutMin = 10000000000n;
+          const path = [
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", //weth
+            "0xdac17f958d2ee523a2206206994597c13d831ec7", //usdt
+          ];
+
+          const deadline = Math.floor(Date.now() / 1000) + 60 * 10;
+          const transactionResponse = await routerV2.swapExactETHForTokens(
+            amountOutMin,
+            path,
+            user,
+            deadline,
+            {
+              value: ethers.parseEther("10"),
+            }
+          );
+          await transactionResponse.wait(1);
+
+          await usdt
+            .connect(userSigner)
+            .approve(ownership.target, price * BigInt(1e6));
+          await ownership.connect(userSigner).buyOwnership(tokenId);
+        });
+        it("Should withdraw the contract funds to the deployer", async () => {
+          const usdtDeployerBalance = await usdt.balanceOf(deployer);
+
+          await ownership.withdraw();
+          const usdtDeployerBalanceAfter = await usdt.balanceOf(deployer);
+          assert(usdtDeployerBalanceAfter > usdtDeployerBalance);
+        });
+      });
     });

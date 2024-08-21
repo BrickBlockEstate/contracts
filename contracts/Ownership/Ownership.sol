@@ -83,14 +83,12 @@ contract Ownership is ERC721URIStorage, Ownable {
     }
 
     function withdraw() external onlyOwner {
-        require(i_usdt.balanceOf(address(this)) > 0, "Contract empty");
         uint256 contractBalance = i_usdt.balanceOf(address(this));
+        require(contractBalance > 0, "Contract empty");
 
-        try this.attemptTransfer(address(this), msg.sender, contractBalance) {
-            emit WithdrawSuccessful(msg.sender, contractBalance);
-        } catch {
-            revert Ownership__Transfer_Failed_withdraw();
-        }
+        i_usdt.safeTransfer(msg.sender, contractBalance);
+
+        emit WithdrawSuccessful(msg.sender, contractBalance);
     }
 
     function attemptTransfer(
