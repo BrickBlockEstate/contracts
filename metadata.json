@@ -1,0 +1,32 @@
+{
+  "host_name": "John James",
+  "address": "0x123dff23fdsdfvvgth4542cwe231245cfg",
+  "D.O.B": "01-13-5766",
+  "nationality": "martian",
+  "verified": true,
+  "price_per_night": 20,
+  "image_1": "<ipfs hash for image 1>",
+  "image_2": "<ipfs hash for image 2>",
+  "image_3": "<ipfs hash for image 3>",
+  "image_4": "<ipfs hash for image 4>",
+  "property_attributes": [
+    {
+      "listing_type": "farm house",
+      "allocation_space": "full",
+      "allowed_guests": 2,
+      "pets_allowed": true,
+      "bedrooms_available": 6,
+      "beds": 3,
+      "bathrooms": 3
+    },
+    {
+      "Wi-Fi": false,
+      "gas": true,
+      "electricity": true,
+      "TV": true,
+      "fireplace": true,
+      "security_cameras": false,
+      "kitchen": "stocked"
+    }
+  ]
+}

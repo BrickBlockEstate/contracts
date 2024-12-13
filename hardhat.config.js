@@ -11,11 +11,13 @@ const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL;
 const COINMARKETCAP_API_KEY = process.env.COINMARKETCAP_API_KEY;
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY;
 const MAINNET_RPC_URL = process.env.MAINNET_RPC_URL;
+const SEPOLIA_INFURA_RPC = process.env.SEPOLIA_INFURA_RPC;
 
 module.exports = {
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {
+      allowUnlimitedContractSize: true,
       chainId: 31337,
       forking: {
         url: MAINNET_RPC_URL,
@@ -24,9 +26,15 @@ module.exports = {
       blockConfirmations: 1,
     },
     sepolia: {
-      url: SEPOLIA_RPC_URL,
+      url: SEPOLIA_INFURA_RPC,
       accounts: [PRIVATE_KEY],
       chainId: 11155111,
+      blockConfirmations: 6,
+    },
+    mainnet: {
+      url: MAINNET_RPC_URL,
+      accounts: [PRIVATE_KEY],
+      chainId: 1,
       blockConfirmations: 6,
     },
   },
@@ -40,10 +48,17 @@ module.exports = {
     user2: {
       default: 2,
     },
+    user3: {
+      default: 3,
+    },
+    user4: {
+      default: 4,
+    },
   },
   etherscan: {
     apiKey: {
       sepolia: ETHERSCAN_API_KEY,
+      mainnet: ETHERSCAN_API_KEY,
     },
   },
   gasReporter: {
@@ -58,12 +73,21 @@ module.exports = {
     timeout: 500000,
   },
   solidity: {
+    settings: {
+      // optimizer: {
+      //   enabled: false,
+      //   runs: 200,
+      // },
+    },
     compilers: [
       {
-        version: "0.8.19",
+        version: "0.8.18",
       },
       {
         version: "0.8.20",
+      },
+      {
+        version: "0.8.23",
       },
       {
         version: "0.7.6",
@@ -78,7 +102,10 @@ module.exports = {
         version: "0.6.6",
       },
       {
-        version: "0.8.26",
+        version: "0.8.28",
+      },
+      {
+        version: "0.5.16",
       },
     ],
   },
